@@ -4,8 +4,8 @@
 
 1. Clone the repository:
 ``` bash
-git clone https://github.com/malewicz1337/satoshkin-xpayments-nestjs
-cd satoshkin-xpayments-nestjs
+git clone https://github.com/malewicz1337/xpayments-nestjs
+cd xpayments-nestjs
 ```
 
 2. Configure .env file:
@@ -45,9 +45,6 @@ The application should now be running at `http://localhost:3000` (or whatever po
 
 This project uses PostgreSQL. The connection details are in the `docker-compose.yml` file.
 
-## Caching
-
-Redis is used for queues. The connection details are also in the `docker-compose.yml` file.
 
 ## ORM
 
