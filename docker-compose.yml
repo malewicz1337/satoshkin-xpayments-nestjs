@@ -1,8 +1,6 @@
 services:
   redis:
     image: redis:latest
-    networks:
-      - app_network
     ports:
       - '6379:6379'
     restart: always
@@ -23,8 +21,6 @@ services:
 
 networks:
   postgres:
-    driver: bridge
-  app_network:
     driver: bridge
 
 volumes:
