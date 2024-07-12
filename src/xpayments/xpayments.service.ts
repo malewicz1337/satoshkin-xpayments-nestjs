@@ -1,29 +1,54 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { XPaymentWebhookDto } from './dto/xpayment-webhook.dto';
-import { createErrorResult, createSuccessResult } from './utils';
+import { createSuccessResult } from './utils';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class XpaymentsService {
-  private readonly logger = new Logger(XpaymentsService.name);
-  constructor(@InjectQueue('xpayments') private xpaymentsQueue: Queue) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async processPayment(payload: XPaymentWebhookDto): Promise<any> {
-    try {
-      const job = await this.xpaymentsQueue.add('process', payload, {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
+    const { id, amount, metadata, status, date } = payload;
+    const user = await this.prisma.user.findUnique({
+      where: { id: metadata.user_id },
+    });
+    if (!user) {
+      return HttpStatus.NOT_FOUND;
+    }
+
+    const existingPayment = await this.prisma.payment.findUnique({
+      where: { externalId: id.toString() },
+    });
+    if (existingPayment) {
+      return HttpStatus.CONFLICT;
+    }
+
+    const result = await this.prisma.$transaction(async (prisma) => {
+      await prisma.payment.create({
+        data: {
+          externalId: id.toString(),
+          userId: metadata.user_id,
+          amount,
+          status,
+          date: new Date(date),
         },
       });
 
-      this.logger.log(`Payment queued for processing. Job ID: ${job.id}`);
-      return createSuccessResult('Payment queued for processing');
-    } catch (error) {
-      this.logger.error('Error queueing payment:', error);
-      return createErrorResult('Internal server error');
+      if (status === 'success') {
+        await prisma.balance.upsert({
+          where: { userId: metadata.user_id },
+          update: { amount: { increment: amount } },
+          create: { userId: metadata.user_id, amount },
+        });
+      }
+
+      return true;
+    });
+
+    if (!result) {
+      return HttpStatus.INTERNAL_SERVER_ERROR;
     }
+
+    return createSuccessResult('Payment processed successfully');
   }
 }

@@ -1,16 +1,14 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, RequestMethod } from '@nestjs/common';
 import { XpaymentsModule } from './xpayments/xpayments.module';
-import { BullModule } from '@nestjs/bullmq';
+import { WhitelistMiddleware } from './middleware/whitelist.middleware';
 
 @Module({
-  imports: [
-    BullModule.forRoot({
-      connection: {
-        host: process.env.REDIS_HOST,
-        port: parseInt(process.env.REDIS_PORT),
-      },
-    }),
-    XpaymentsModule,
-  ],
+  imports: [XpaymentsModule],
 })
-export class AppModule {}
+export class AppModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(WhitelistMiddleware)
+      .forRoutes({ path: 'xpayments', method: RequestMethod.ALL });
+  }
+}
