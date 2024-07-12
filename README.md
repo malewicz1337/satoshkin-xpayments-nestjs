@@ -1,4 +1,4 @@
-# Satishkin XPayments - NestJS
+# Satoshkin XPayments - NestJS
 
 ## Setup
 
