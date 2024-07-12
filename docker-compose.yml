@@ -1,0 +1,31 @@
+services:
+  redis:
+    image: redis:latest
+    networks:
+      - app_network
+    ports:
+      - '6379:6379'
+    restart: always
+
+  postgres:
+    image: postgres:latest
+    networks:
+      - postgres
+    environment:
+      POSTGRES_USER: johndoe
+      POSTGRES_PASSWORD: randompassword
+      POSTGRES_DB: mydb
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+networks:
+  postgres:
+    driver: bridge
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
