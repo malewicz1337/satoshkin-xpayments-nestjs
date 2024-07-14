@@ -1,54 +1,29 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { XPaymentWebhookDto } from './dto/xpayment-webhook.dto';
-import { createSuccessResult } from './utils';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue, QueueEvents } from 'bullmq';
 
 @Injectable()
 export class XpaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(XpaymentsService.name);
+  private queueEvents: QueueEvents;
+
+  constructor(
+    @InjectQueue('xpayments') private readonly xpaymentsQueue: Queue,
+  ) {
+    this.queueEvents = new QueueEvents('xpayments');
+    this.queueEvents.on('completed', ({ jobId, returnvalue }) => {
+      this.logger.log(`Job ${jobId} has completed!`, returnvalue);
+    });
+
+    this.queueEvents.on('failed', ({ jobId, failedReason }) => {
+      this.logger.log(`Job ${jobId} has failed!`, failedReason);
+    });
+  }
 
   async processPayment(payload: XPaymentWebhookDto): Promise<any> {
-    const { id, amount, metadata, status, date } = payload;
-    const user = await this.prisma.user.findUnique({
-      where: { id: metadata.user_id },
-    });
-    if (!user) {
-      return HttpStatus.NOT_FOUND;
-    }
-
-    const existingPayment = await this.prisma.payment.findUnique({
-      where: { externalId: id.toString() },
-    });
-    if (existingPayment) {
-      return HttpStatus.CONFLICT;
-    }
-
-    const result = await this.prisma.$transaction(async (prisma) => {
-      await prisma.payment.create({
-        data: {
-          externalId: id.toString(),
-          userId: metadata.user_id,
-          amount,
-          status,
-          date: new Date(date),
-        },
-      });
-
-      if (status === 'success') {
-        await prisma.balance.upsert({
-          where: { userId: metadata.user_id },
-          update: { amount: { increment: amount } },
-          create: { userId: metadata.user_id, amount },
-        });
-      }
-
-      return true;
-    });
-
-    if (!result) {
-      return HttpStatus.INTERNAL_SERVER_ERROR;
-    }
-
-    return createSuccessResult('Payment processed successfully');
+    const job = await this.xpaymentsQueue.add('processPayment', payload);
+    const result = await job.waitUntilFinished(this.queueEvents);
+    return result;
   }
 }
